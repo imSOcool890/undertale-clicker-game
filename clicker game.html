@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Undertale Clicker with Battles</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+    body {
+      font-family: 'Papyrus', fantasy;
+      text-align: center;
+      margin-top: 40px;
+      background-color: black;
+      color: white;
+      position: relative;
+    }
+
+    #clickButton {
+      font-size: 24px;
+      padding: 10px 30px;
+      cursor: pointer;
+      background-color: red;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-family: 'Papyrus', fantasy;
+      margin: 10px;
+      user-select: none;
+    }
+
+    #clickButton.battle-mode {
+      background-color: #550000;
+      animation: pulse 1s infinite alternate;
+    }
+
+    @keyframes pulse {
+      from { box-shadow: 0 0 10px #ff0000; }
+      to { box-shadow: 0 0 30px #ff5555; }
+    }
+
+    #resetButton {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 16px;
+      padding: 12px 24px;
+      background-color: black;
+      color: red;
+      border: 2px solid red;
+      cursor: pointer;
+      margin: 10px;
+      transition: all 0.2s ease-in-out;
+    }
+
+    #resetButton:hover {
+      background-color: red;
+      color: black;
+      box-shadow: 0 0 10px red;
+    }
+
+    #counter {
+      font-size: 40px;
+      margin-top: 20px;
+      color: #00ffff;
+    }
+
+    #coinsDisplay {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 20px;
+      margin-top: 30px;
+      color: #00ffff;
+    }
+
+    #gasterBlaster {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0);
+      opacity: 0;
+      width: 300px;
+      transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+      z-index: 999;
+      pointer-events: none;
+    }
+
+    #gasterBlaster.active {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+    }
+
+    #shop {
+      margin-top: 50px;
+      border-top: 2px solid #00ffff;
+      padding-top: 20px;
+      max-width: 520px;
+      margin-left: auto;
+      margin-right: auto;
+      text-align: left;
+      font-family: 'Press Start 2P', monospace;
+    }
+
+    .shop-item {
+      background-color: #111;
+      border: 2px solid #00ffff;
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: white;
+      transition: background-color 0.2s ease;
+      user-select: none;
+    }
+
+    .shop-item:hover {
+      background-color: #003333;
+    }
+
+    .shop-item.disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .item-name {
+      font-size: 16px;
+    }
+
+    .item-cost {
+      font-size: 16px;
+      color: #00ffff;
+      margin-left: 10px;
+    }
+
+    .item-desc {
+      font-size: 10px;
+      color: #666;
+      font-family: 'Papyrus', fantasy;
+      margin-top: 2px;
+      max-width: 300px;
+    }
+
+    #battleStatus {
+      margin-top: 20px;
+      font-family: 'Press Start 2P', monospace;
+      color: #ff5555;
+      font-size: 18px;
+      display: none;
+    }
+
+    #battleTimer {
+      font-size: 18px;
+      color: #ffaaaa;
+    }
+
+    #battleRecord {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 12px;
+      background-color: rgba(0,0,0,0.5);
+      padding: 6px 10px;
+      border: 2px solid #fff;
+      border-radius: 10px;
+      color: white;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Clicker Game</h1>
+  <button id="clickButton">Click me!</button>
+  <button id="resetButton">RESET</button>
+  <div id="counter">0</div>
+  <div id="coinsDisplay">Coins: 0</div>
+
+  <!-- Battle Info -->
+  <div id="battleStatus">
+    <div>Battle Mode! Click <span id="battleTarget"></span> times before time runs out!</div>
+    <div>Clicks: <span id="battleClicks">0</span> / <span id="battleTargetCount">0</span></div>
+    <div>Time Left: <span id="battleTimer">10</span>s</div>
+  </div>
+
+  <!-- Win/Loss Record -->
+  <div id="battleRecord">
+    Battles Won: <span id="wins">0</span> | Battles Lost: <span id="losses">0</span>
+  </div>
+
+  <!-- Shop -->
+  <div id="shop">
+    <h2>Shop</h2>
+  </div>
+
+  <!-- Gaster Blaster Image -->
+  <img id="gasterBlaster" src="https://static.wikia.nocookie.net/undertale/images/f/fb/Gaster_Blaster.png" alt="Gaster Blaster">
+
+  <script>
+    let count = 0;
+    let coins = 0;
+    let coinsPerClick = 1;
+    let doubleClicksLeft = 0;
+    let tripleClicksLeft = 0;
+    let autoClickerActive = false;
+    let autoClickerInterval;
+    let autoClickerFrozen = false;
+
+    let inBattle = false;
+    let battleClicks = 0;
+    let battleTarget = 30;
+    let battleTime = 10;
+    let battleTimerInterval;
+    let battleTimeLeft = battleTime;
+    let attemptedPurchase = null;
+    let wins = 0;
+    let losses = 0;
+
+    const clickButton = document.getElementById('clickButton');
+    const resetButton = document.getElementById('resetButton');
+    const counter = document.getElementById('counter');
+    const coinsDisplay = document.getElementById('coinsDisplay');
+    const gasterBlaster = document.getElementById('gasterBlaster');
+    const shop = document.getElementById('shop');
+    const battleStatus = document.getElementById('battleStatus');
+    const battleClicksDisplay = document.getElementById('battleClicks');
+    const battleTargetCount = document.getElementById('battleTargetCount');
+    const battleTimerDisplay = document.getElementById('battleTimer');
+    const winsDisplay = document.getElementById('wins');
+    const lossesDisplay = document.getElementById('losses');
+
+    const shopItemsData = [
+      { id: 'butterscotchPie', name: 'Butterscotch Pie', cost: 10, power: 1, desc: '+1 coin per click', unlockClicks: 0, special: null },
+      { id: 'temmieFlakes', name: 'Temmie Flakes', cost: 50, power: 5, desc: '+5 coins per click', unlockClicks: 0, special: null },
+      { id: 'dogResidue', name: 'Dog Residue', cost: 100, power: 0, desc: 'Double coins next 5 clicks', unlockClicks: 50, special: 'dogResidue' },
+      { id: 'spiderDonut', name: 'Spider Donut', cost: 200, power: 20, desc: '+20 coins per click', unlockClicks: 100, special: null },
+      { id: 'instantNoodles', name: 'Instant Noodles', cost: 300, power: 50, desc: '+50 coins per click', unlockClicks: 150, special: null },
+      { id: 'annoyingDog', name: 'Annoying Dog', cost: 500, power: 0, desc: 'Auto-clicks every 2s', unlockClicks: 200, special: 'autoClicker' },
+      { id: 'starfait', name: 'Starfait', cost: 700, power: 100, desc: '+100 coins per click', unlockClicks: 300, special: null },
+      { id: 'snowmanPiece', name: 'Snowman Piece', cost: 1000, power: 0, desc: 'Triple coins next 10 clicks', unlockClicks: 500, special: 'tripleClick' },
+      { id: 'niceCream', name: 'Nice Cream', cost: 1500, power: 0, desc: 'Freezes auto-clicker for 10s', unlockClicks: 800, special: 'freezeAutoClicker' }
+    ];
+
+    const ownedItems = {
+      autoClickerCount: 0
+    };
+
+    function updateDisplay() {
+      counter.textContent = count;
+      coinsDisplay.textContent = `Coins: ${coins}`;
+      winsDisplay.textContent = wins;
+      lossesDisplay.textContent = losses;
+    }
+
+    function renderShop() {
+      shop.innerHTML = '<h2>Shop</h2>';
+      shopItemsData.forEach(item => {
+        if (count >= item.unlockClicks) {
+          const div = document.createElement('div');
+          div.className = 'shop-item';
+          if (inBattle) div.classList.add('disabled');
+          div.innerHTML = `
+            <div>
+              <div class="item-name">${item.name}</div>
+              <div class="item-desc">${item.desc}</div>
+            </div>
+            <div class="item-cost">${item.cost}</div>
+          `;
+          div.onclick = () => tryBuyItem(item);
+          shop.appendChild(div);
+        }
+      });
+    }
+
+    function tryBuyItem(item) {
+      if (inBattle || coins < item.cost) return;
+
+      if (Math.random() < 0.10) {
+        startBattle(item);
+      } else {
+        buyItem(item);
+      }
+    }
+
+    function buyItem(item) {
+      coins -= item.cost;
+      if (item.special === 'dogResidue') doubleClicksLeft += 5;
+      else if (item.special === 'tripleClick') tripleClicksLeft += 10;
+      else if (item.special === 'freezeAutoClicker') freezeAutoClicker();
+      else if (item.special === 'autoClicker') {
+        ownedItems.autoClickerCount++;
+        if (!autoClickerActive) startAutoClicker();
+      } else coinsPerClick += item.power;
+
+      updateDisplay();
+      renderShop();
+    }
+
+    function startBattle(item) {
+      inBattle = true;
+      attemptedPurchase = item;
+      battleClicks = 0;
+      battleTimeLeft = battleTime;
+      battleTargetCount.textContent = battleTarget;
+      battleClicksDisplay.textContent = 0;
+      battleTimerDisplay.textContent = battleTimeLeft;
+      battleStatus.style.display = 'block';
+      clickButton.classList.add('battle-mode');
+      clickButton.textContent = "BATTLE!";
+      renderShop();
+
+      battleTimerInterval = setInterval(() => {
+        battleTimeLeft--;
+        battleTimerDisplay.textContent = battleTimeLeft;
+        if (battleTimeLeft <= 0) endBattle(false);
+      }, 1000);
+    }
+
+    function endBattle(won) {
+      clearInterval(battleTimerInterval);
+      inBattle = false;
+      battleStatus.style.display = 'none';
+      clickButton.classList.remove('battle-mode');
+      clickButton.textContent = "Click me!";
+      attemptedPurchase = null;
+      if (won) wins++; else losses++;
+      updateDisplay();
+      renderShop();
+    }
+
+    clickButton.onclick = () => {
+      if (inBattle) {
+        battleClicks++;
+        battleClicksDisplay.textContent = battleClicks;
+        if (battleClicks >= battleTarget) endBattle(true);
+        return;
+      }
+
+      let power = coinsPerClick;
+      if (tripleClicksLeft > 0) { power *= 3; tripleClicksLeft--; }
+      else if (doubleClicksLeft > 0) { power *= 2; doubleClicksLeft--; }
+
+      count += power;
+      coins += power;
+      updateDisplay();
+      renderShop();
+    };
+
+    resetButton.onclick = () => {
+      gasterBlaster.classList.add('active');
+      setTimeout(() => {
+        count = coins = coinsPerClick = 1;
+        doubleClicksLeft = tripleClicksLeft = 0;
+        stopAutoClicker();
+        inBattle = false;
+        clearInterval(battleTimerInterval);
+        battleStatus.style.display = 'none';
+        clickButton.classList.remove('battle-mode');
+        clickButton.textContent = "Click me!";
+        updateDisplay();
+        renderShop();
+        gasterBlaster.classList.remove('active');
+      }, 600);
+    };
+
+    function startAutoClicker() {
+      autoClickerActive = true;
+      autoClickerInterval = setInterval(() => {
+        if (!autoClickerFrozen && !inBattle) {
+          coins += ownedItems.autoClickerCount;
+          count += ownedItems.autoClickerCount;
+          updateDisplay();
+          renderShop();
+        }
+      }, 2000);
+    }
+
+    function stopAutoClicker() {
+      clearInterval(autoClickerInterval);
+      autoClickerActive = false;
+      ownedItems.autoClickerCount = 0;
+    }
+
+    function freezeAutoClicker() {
+      autoClickerFrozen = true;
+      setTimeout(() => { autoClickerFrozen = false; }, 10000);
+    }
+
+    updateDisplay();
+    renderShop();
+  </script>
+</body>
+</html>
